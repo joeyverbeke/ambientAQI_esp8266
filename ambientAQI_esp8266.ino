@@ -5,7 +5,7 @@
 
 // WiFi Parameters
 const char* ssid = "XXX";
-const char* password = "XXX";
+const char* password = "XXX"
 
 //LED Parameters
 #define PIN 0
@@ -21,6 +21,7 @@ float PM_10min = 0.0;
 
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
+
 void setup() {
   Serial.begin(115200);
 
@@ -35,19 +36,24 @@ void setup() {
   pixels.begin();
   pixels.clear();
 
-  brightness = 1.0; //change to time of day
+  brightness = 0.5; //change to time of day
   currentColor = pixels.Color(0, 0, 0);
   AQI_Increasing_Color = pixels.Color(255, 0, 0);
   AQI_Decreasing_Color = pixels.Color(0, 255, 0);
+
+  pixels.fill(pixels.Color(0,0,0), 0, 256);
+  pixels.show();
 }
 
 void getPmValues(float& _PM_now, float& _PM_10min)
 {
+  
   // Check WiFi Status
   if (WiFi.status() == WL_CONNECTED) {
 
     HTTPClient http;  //Object of class HTTPClient
-    http.begin("http://www.purpleair.com/json?key=OZUQH57IOWW840PA&show=60015");
+    http.begin("http://www.purpleair.com/json?show=15091");
+    //http.begin("http://www.purpleair.com/json?key=OZUQH57IOWW840PA&show=60015");
     int httpCode = http.GET();
 
     //Check the returning code
@@ -101,7 +107,7 @@ void getPmValues(float& _PM_now, float& _PM_10min)
 }
 
 
-uint32_t getColorFromPM(float pm, int _brightness)
+uint32_t getColorFromPM(float pm, float _brightness)
 {
   uint8_t r, g, b = 0;
 
@@ -179,6 +185,7 @@ uint8_t Blue(uint32_t color)
   return color & 0xFF;
 }
 
+//TODO: improve fade
 void fadeToColor(uint32_t _oldColor, uint32_t _newColor, int steps = 30, boolean bidrectional = true)
 {
   uint8_t r, g, b = 0;
@@ -189,14 +196,7 @@ void fadeToColor(uint32_t _oldColor, uint32_t _newColor, int steps = 30, boolean
     g = ((Green(_oldColor) * (steps - i)) + (Green(_newColor) * i)) / steps;
     b = ((Blue(_oldColor) * (steps - i)) + (Blue(_newColor) * i)) / steps;
 
-    //every fourth LED
-    for (int j = 0; j < NUMPIXELS; j++)
-    {
-      if (j % 4 == 0)
-      {
-        pixels.setPixelColor(j, pixels.gamma32(pixels.Color(r, g, b)));
-      }
-    }
+    pixels.setPixelColor(1, pixels.gamma32(pixels.Color(r, g, b))); //assuming 3 LEDs total
 
     pixels.show();
 
@@ -211,14 +211,8 @@ void fadeToColor(uint32_t _oldColor, uint32_t _newColor, int steps = 30, boolean
       g = ((Green(_newColor) * (steps - i)) + (Green(_oldColor) * i)) / steps;
       b = ((Blue(_newColor) * (steps - i)) + (Blue(_oldColor) * i)) / steps;
 
-      //every fourth LED
-      for (int j = 0; j < NUMPIXELS; j++)
-      {
-        if (j % 4 == 0)
-        {
-          pixels.setPixelColor(j, pixels.gamma32(pixels.Color(r, g, b)));
-        }
-      }
+
+      pixels.setPixelColor(1, pixels.gamma32(pixels.Color(r, g, b))); //assuming 3 LEDs total
 
       pixels.show();
 
@@ -231,16 +225,20 @@ void fadeToColor(uint32_t _oldColor, uint32_t _newColor, int steps = 30, boolean
 void displayDirectionOfChange()
 {
   Serial.println(abs(PM_now - PM_10min));
-  
+
   if (abs(PM_now - PM_10min) > 1)
   {
     if (PM_now < PM_10min)
     {
-      Serial.println("display: AQI getting better");
-      fadeToColor(currentColor, AQI_Decreasing_Color);
+      uint32_t decreasingColor = pixels.Color(int(Red(AQI_Decreasing_Color) * brightness), int(Green(AQI_Decreasing_Color) * brightness), int(Blue(AQI_Decreasing_Color) * brightness));
+      
+      Serial.println("display: AQI getting better");    
+      fadeToColor(currentColor, decreasingColor);
     }
     else
     {
+      uint32_t increasingColor = pixels.Color(int(Red(AQI_Increasing_Color) * brightness), int(Green(AQI_Increasing_Color) * brightness), int(Blue(AQI_Increasing_Color ) * brightness));
+      
       Serial.println("display: AQI getting worse");
       fadeToColor(currentColor, AQI_Increasing_Color);
     }
@@ -248,21 +246,19 @@ void displayDirectionOfChange()
 }
 
 void loop() {
-  
+
   pixels.clear();
 
   //TODO: Check time of day to affect brightness
 
   getPmValues(PM_now, PM_10min);
 
-  currentColor = getColorFromPM(PM_now, 1.0);
+  currentColor = getColorFromPM(PM_now, brightness);
   pixels.fill(pixels.gamma32(currentColor), 0, NUMPIXELS);
   pixels.show();
 
-  //gamma correction?
-
   //oscillate a few LEDs to show direction of change
-  //otherwise just wait 120seconds
+  //otherwise just wait 120 (15*8) seconds
   for (int i = 0; i < 8; i++)
   {
     displayDirectionOfChange();
